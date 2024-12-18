@@ -14,19 +14,19 @@
 //
 //@HEADER
 
-// EXERCISE 1 Goal:
+// TODO EXERCISE 1 Goal:
 //   Use Kokkos to parallelize the outer loop of <y,Ax> using Kokkos::parallel_reduce.
 
 #include <limits>
-#include <cmath>
+// #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
 
-// EXERCISE: Include Kokkos_Core.hpp.
+// TODO EXERCISE: Include Kokkos_Core.hpp.
 //           cmath library unnecessary after.
-// #include <Kokkos_Core.hpp>
+#include <Kokkos_Core.hpp>
 
 void checkSizes( int &N, int &M, int &S, int &nrepeat );
 
@@ -40,15 +40,15 @@ int main( int argc, char* argv[] )
   // Read command line arguments.
   for ( int i = 0; i < argc; i++ ) {
     if ( ( strcmp( argv[ i ], "-N" ) == 0 ) || ( strcmp( argv[ i ], "-Rows" ) == 0 ) ) {
-      N = pow( 2, atoi( argv[ ++i ] ) );
+      N = Kokkos::pow( 2, atoi( argv[ ++i ] ) );
       printf( "  User N is %d\n", N );
     }
     else if ( ( strcmp( argv[ i ], "-M" ) == 0 ) || ( strcmp( argv[ i ], "-Columns" ) == 0 ) ) {
-      M = pow( 2, atof( argv[ ++i ] ) );
+      M = Kokkos::pow( 2, atof( argv[ ++i ] ) );
       printf( "  User M is %d\n", M );
     }
     else if ( ( strcmp( argv[ i ], "-S" ) == 0 ) || ( strcmp( argv[ i ], "-Size" ) == 0 ) ) {
-      S = pow( 2, atof( argv[ ++i ] ) );
+      S = Kokkos::pow( 2, atof( argv[ ++i ] ) );
       printf( "  User S is %d\n", S );
     }
     else if ( strcmp( argv[ i ], "-nrepeat" ) == 0 ) {
@@ -68,59 +68,67 @@ int main( int argc, char* argv[] )
   // Check sizes.
   checkSizes( N, M, S, nrepeat );
 
-  // EXERCISE: Initialize Kokkos runtime.
+  // TODO EXERCISE: Initialize Kokkos runtime.
   //           Include braces to encapsulate code between initialize and finalize calls
-  // Kokkos::initialize( argc, argv );
-  // {
+  Kokkos::initialize( argc, argv );
+  {
 
-  // For the sake of simplicity in this exercise, we're using std::malloc directly, but
+  // For the sake of simplicity in this EXERCISE, we're using std::malloc directly, but
   // later on we'll learn a better way, so generally don't do this in Kokkos programs.
   // Allocate y, x vectors and Matrix A:
-  // EXERCISE: For the impatient only: replace std::malloc with Kokkos::kokkos_malloc<>
+  // TODO EXERCISE: For the impatient only: replace std::malloc with Kokkos::kokkos_malloc<>
   //           This would enable running on GPUs, if KOKKOS_LAMBDA is used instead of [=]
   //           as capture clause for all lambdas. It will be properly introduced later.
-  auto y = static_cast<double*>(std::malloc(N * sizeof(double)));
-  auto x = static_cast<double*>(std::malloc(M * sizeof(double)));
-  auto A = static_cast<double*>(std::malloc(N * M * sizeof(double)));
+  auto y = static_cast<double*>(Kokkos::kokkos_malloc(N * sizeof(double)));
+  auto x = static_cast<double*>(Kokkos::kokkos_malloc(M * sizeof(double)));
+  auto A = static_cast<double*>(Kokkos::kokkos_malloc(N * M * sizeof(double)));
 
   // Initialize y vector.
-  // EXERCISE: Convert outer loop to Kokkos::parallel_for.
-  for ( int i = 0; i < N; ++i ) {
-    y[ i ] = 1;
-  }
+  // TODO EXERCISE: Convert outer loop to Kokkos::parallel_for.
+  Kokkos::parallel_for("init y", N,
+    KOKKOS_LAMBDA(int i)
+    {
+      y[ i ] = 1;
+    });
 
   // Initialize x vector.
-  // EXERCISE: Convert outer loop to Kokkos::parallel_for.
-  for ( int i = 0; i < M; ++i ) {
+  // TODO EXERCISE: Convert outer loop to Kokkos::parallel_for.
+  Kokkos::parallel_for("init x", M,
+    KOKKOS_LAMBDA(int i)
+    {
     x[ i ] = 1;
-  }
+    });
 
   // Initialize A matrix, note 2D indexing computation.
-  // EXERCISE: Convert outer loop to Kokkos::parallel_for.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < M; ++i ) {
-      A[ j * M + i ] = 1;
-    }
-  }
+  // TODO EXERCISE: Convert outer loop to Kokkos::parallel_for.
+  Kokkos::parallel_for("init A", N,
+    KOKKOS_LAMBDA(int j)
+    {
+      for ( int i = 0; i < M; ++i ) {
+        A[ j * M + i ] = 1;
+      }
+    });
 
   // Timer products.
-  //Kokkos::Timer timer;
-  auto start = std::chrono::high_resolution_clock::now();
+  Kokkos::Timer timer;
+  // auto start = std::chrono::high_resolution_clock::now();
 
   for ( int repeat = 0; repeat < nrepeat; repeat++ ) {
     // Application: <y,Ax> = y^T*A*x
     double result = 0;
 
-    // EXERCISE: Convert outer loop to Kokkos::parallel_reduce.
-    for ( int j = 0; j < N; ++j ) {
+    // TODO EXERCISE: Convert outer loop to Kokkos::parallel_reduce.
+    Kokkos::parallel_reduce("reduction", N,
+      KOKKOS_LAMBDA(int j, double &update)
+    {
       double temp2 = 0;
 
       for ( int i = 0; i < M; ++i ) {
         temp2 += A[ j * M + i ] * x[ i ];
       }
 
-      result += y[ j ] * temp2;
-    }
+      update += y[ j ] * temp2;
+    }, result);
 
     // Output result.
     if ( repeat == ( nrepeat - 1 ) ) {
@@ -134,12 +142,12 @@ int main( int argc, char* argv[] )
     }
   }
 
-  
+
 
   // Calculate time.
-  //double time = timer.seconds();
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> time = end - start;
+  double time = timer.seconds();
+  // auto end = std::chrono::high_resolution_clock::now();
+  // std::chrono::duration<double> time = end - start;
 
   // Calculate bandwidth.
   // Each matrix A row (each of length M) is read once.
@@ -150,15 +158,15 @@ int main( int argc, char* argv[] )
 
   // Print results (problem size, time and bandwidth in GB/s).
   printf( "  N( %d ) M( %d ) nrepeat ( %d ) problem( %g MB ) time( %g s ) bandwidth( %g GB/s )\n",
-          N, M, nrepeat, Gbytes * 1000, time.count(), Gbytes* nrepeat / time.count());
+          N, M, nrepeat, Gbytes * 1000, time, Gbytes* nrepeat / time);
 
-  std::free(A);
-  std::free(y);
-  std::free(x);
+  Kokkos::kokkos_free(A);
+  Kokkos::kokkos_free(y);
+  Kokkos::kokkos_free(x);
 
-  // EXERCISE: finalize Kokkos runtime
-  // }
-  // Kokkos::finalize();
+  // TODO EXERCISE: finalize Kokkos runtime
+  }
+  Kokkos::finalize();
 
   return 0;
 }

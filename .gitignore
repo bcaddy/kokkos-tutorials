@@ -5,3 +5,14 @@ spack-build-out.txt
 cmake_install.cmake
 CMakeFiles/
 LibInstalls/
+
+# Stuff bob added
+*.o
+*.a
+*.tmp
+*.host
+core.*
+KokkosCore_Config*
+KokkosCore_config.h
+Config.hpp
+desul/*
