@@ -9,6 +9,7 @@ LibInstalls/
 # Stuff bob added
 *.o
 *.a
+*.cuda
 *.tmp
 *.host
 core.*
