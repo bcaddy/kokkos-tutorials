@@ -80,27 +80,25 @@ int main( int argc, char* argv[] )
 
   // EXERCISE: Replace this for-loop with a parallel_for and initialize the device View
   // Initialize y vector on host.
-  for ( int i = 0; i < N; ++i ) {
-    y( i ) = 1;
-  }
+  Kokkos::parallel_for("init y", N, KOKKOS_LAMBDA(int i){
+    y(i) = 1;
+  });
 
   // EXERCISE: Replace this for-loop with a parallel_for and initialize the device View
   // Initialize x vector on host.
-  for ( int i = 0; i < M; ++i ) {
-    x( i ) = 1;
-  }
+  Kokkos::parallel_for("init x", M, KOKKOS_LAMBDA(int i){
+    x(i) = 1;
+  });
 
   // EXERCISE: Replace this for-loop with a parallel_for and initialize the device View
   // EXERCISE: Use an MDRangePolicy with the parallel_for to replace these tightly
   //           nested loops
   // Initialize A matrix on host, note 2D indexing.
-  for ( int j = 0; j < N; ++j ) {
-    for ( int i = 0; i < M; ++i ) {
-      A( j, i ) = 1;
-    }
-  }
+  Kokkos::parallel_for("init A", Kokkos::MDRangePolicy({0,0},{N,M}), KOKKOS_LAMBDA(int j, int i){
+    A(j,i) = 1;
+  });
 
-  // Wait for initalization to finish (after they are converted)
+  // Wait for initialization to finish (after they are converted)
   Kokkos::fence();
 
   // Timer products.
