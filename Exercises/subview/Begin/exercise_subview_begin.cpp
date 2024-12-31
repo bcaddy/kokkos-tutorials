@@ -17,7 +17,7 @@
 // EXERCISE 4 (subview) Goals:
 // This exercise begins with the solution from Exercise 04
 // To practice usage of subviews, by creating a subview of row j of matrix A within
-// the parallel_reduce lambda body; then replace the multiplication A( j, : ) * x( : ) 
+// the parallel_reduce lambda body; then replace the multiplication A( j, : ) * x( : )
 // with row_j_A( : ) * x( : )
 
 #include <limits>
@@ -132,11 +132,12 @@ int main( int argc, char* argv[] )
 
       // EXERCISE create a subview for row j of matrix A
       // HINT: Use 'auto' to determine the type
+      auto row_j_of_A = Kokkos::subview(A, j, Kokkos::ALL);
 
       for ( int i = 0; i < M; ++i ) {
         // EXERCISE replace the A(j,:) in A(j,:) * x(:) multiplication with
         //          row_j_of_A * x, using the subview of row j of A
-        temp2 += A( j, i ) * x( i );
+        temp2 += row_j_of_A( i ) * x( i );
       }
 
       update += y( j ) * temp2;
@@ -154,7 +155,7 @@ int main( int argc, char* argv[] )
     }
   }
 
- 
+
 
   // Calculate time.
   double time = timer.seconds();
