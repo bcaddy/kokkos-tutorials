@@ -1,13 +1,13 @@
 /*
 //@HEADER
 // ************************************************************************
-// 
+//
 //                        Kokkos v. 2.0
 //              Copyright (2014) Sandia Corporation
-// 
+//
 // Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
 // the U.S. Government retains certain rights in this software.
-// 
+//
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -36,7 +36,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Christian R. Trott (crtrott@sandia.gov)
-// 
+//
 // ************************************************************************
 //@HEADER
  */
@@ -74,16 +74,15 @@
 void load_state(view_type density, view_type temperature);
 void compute_pressure(view_type pressure, view_type density, view_type temperature);
 void compute_internal_energy(view_type energy, view_type temperature);
-void compute_enthalpy(const int size, double * enthalpy, const double*  energy, 
-		      const double * pressure, const double* density);
-void check_results(view_type pressure, view_type energy, const double *enthalpy);
+void compute_enthalpy(view_type enthalpy, view_type energy, view_type pressure, view_type density);
+void check_results(view_type pressure, view_type energy, view_type enthalpy);
 
 int main (int narg, char* arg[]) {
-  
+
   std::cout << "initializing kokkos....." <<std::endl;
 
    Kokkos::initialize (narg, arg);
-   
+
    std::cout << "......done." << std::endl;
    {
       // Create DualViews. This will allocate on both the device and its
@@ -95,9 +94,10 @@ int main (int narg, char* arg[]) {
       view_type density ("density",size);
       view_type temperature ("temperature",size);
       view_type energy ("energy",size);
-   
-      std::vector<double> enthalpy (size, -1);
-      
+
+      // std::vector<double> enthalpy (size, -1);
+      view_type enthalpy ("enthalpy", size);
+
       load_state(density, temperature);
 
       // this section of code is supposed to mimic the structure of a time loop in a
@@ -110,14 +110,14 @@ int main (int narg, char* arg[]) {
 	auto density_view  = density.h_view;
 	auto pressure_view  = pressure.h_view;
 	auto energy_view = energy.h_view;
-     
+
 	density.sync<view_type::host_mirror_space> ();
 	pressure.sync<view_type::host_mirror_space> ();
 	energy.sync<view_type::host_mirror_space> ();
 
-	compute_enthalpy(size, enthalpy.data(), energy_view.data(), pressure_view.data(), density_view.data());
+	compute_enthalpy(enthalpy, energy, pressure, density);
       }
-      check_results(pressure, energy, enthalpy.data());
+      check_results(pressure, energy, enthalpy);
 
    }
 
@@ -160,17 +160,29 @@ void compute_internal_energy(view_type energy, view_type temperature) {
    Kokkos::fence();
 }
 
-void compute_enthalpy(const int size, double * enthalpy, const double * energy, const double * pressure, const double * density) {
+void compute_enthalpy(view_type enthalpy, view_type energy, view_type pressure, view_type density) {
 
   // EXERCISE: convert to run on device
   // with DualViews.  use either a functor or a lambda
+   energy.sync_device();
+   pressure.sync_device();
+   density.sync_device();
 
-   for (int i = 0; i < size; ++i) {
-      enthalpy[i] = energy[i] + pressure[i]/density[i];
-   }
+   enthalpy.modify_device();
 
+   // get device views
+   auto d_energy = energy.view_device();
+   auto d_pressure = pressure.view_device();
+   auto d_density = density.view_device();
+   auto d_enthalpy = enthalpy.view_device();
+
+   const int size = enthalpy.extent(0);
+   Kokkos::parallel_for("enthalpy loop", size, KOKKOS_LAMBDA(int i){
+      d_enthalpy(i) = d_energy(i) + d_pressure(i)/d_density(i);
+   });
+   Kokkos::fence();
 }
-void check_results(view_type dv_pressure, view_type dv_energy, const double * enthalpy) {
+void check_results(view_type dv_pressure, view_type dv_energy, view_type enthalpy) {
 
    const double R = ComputePressure<view_type::host_mirror_space>::gasConstant;
    const double thePressure =  R*density_0*temperature_0;
@@ -183,6 +195,9 @@ void check_results(view_type dv_pressure, view_type dv_energy, const double * en
    auto pressure  = dv_pressure.h_view;
    auto energy = dv_energy.h_view;
 
+   enthalpy.sync_host();
+   auto h_enthalpy = enthalpy.view_host();
+
    dv_pressure.sync<view_type::host_mirror_space> ();
    dv_energy.sync<view_type::host_mirror_space> ();
 
@@ -193,7 +208,7 @@ void check_results(view_type dv_pressure, view_type dv_energy, const double * en
    for(int i = 0; i < size; ++i) {
       pressureError += (pressure(i) - thePressure)*(pressure(i) - thePressure);
       energyError += (energy(i) - theEnergy)*(energy(i) - theEnergy);
-      enthalpyError += (enthalpy[i] - theEnthalpy)*(enthalpy[i] - theEnthalpy);
+      enthalpyError += (h_enthalpy(i) - theEnthalpy)*(h_enthalpy(i) - theEnthalpy);
    }
 
    std::cout << "pressure error = " << pressureError << std::endl;
