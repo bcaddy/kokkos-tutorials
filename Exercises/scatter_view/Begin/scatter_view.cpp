@@ -3,23 +3,28 @@
 #include <iostream> // for std::cout
 
 // EXERCISE: convert this loop into using ScatterView
-// #include<Kokkos_ScatterView.hpp>
+#include<Kokkos_ScatterView.hpp>
 
 // Scatter Add algorithm using atomics
 // EXERCISE: is atomic memory trait still needed?
-double scatter_view_loop(Kokkos::View<int**> v, 
-		 Kokkos::View<int*,Kokkos::MemoryTraits<Kokkos::Atomic>> r) {
+double scatter_view_loop(Kokkos::View<int**> v,
+		 Kokkos::View<int*> r) {
   //EXERCISE: Create ScatterView before starting timer, assuming you could reuse it in real code
+  Kokkos::Experimental::ScatterView<int*> scatter_r(r);
+
   Kokkos::Timer timer;
   //EXERCISE: reset scatterview
+  scatter_r.reset();
   // Run Atomic Loop not r is already using atomics by default
-  Kokkos::parallel_for("Atomic Loop", v.extent(0), 
+  Kokkos::parallel_for("Atomic Loop", v.extent(0),
     KOKKOS_LAMBDA(const int i) {
     //EXERCISE: get accessors
+    auto access = scatter_r.access();
     for(int j=0; j<v.extent(1); j++)
-      r(v(i,j))++;
+      access(v(i,j)) += 1;
   });
   //EXERCISE: contribute back to original results view
+  Kokkos::Experimental::contribute(r, scatter_r);
   // Wait for Kernel to finish before timing
   Kokkos::fence();
   double time = timer.seconds();
@@ -27,11 +32,11 @@ double scatter_view_loop(Kokkos::View<int**> v,
 }
 
 // Scatter Add algorithm using atomics
-double atomic_loop(Kokkos::View<int**> v, 
+double atomic_loop(Kokkos::View<int**> v,
 		 Kokkos::View<int*,Kokkos::MemoryTraits<Kokkos::Atomic>> r) {
   Kokkos::Timer timer;
   // Run Atomic Loop not r is already using atomics by default
-  Kokkos::parallel_for("Atomic Loop", v.extent(0), 
+  Kokkos::parallel_for("Atomic Loop", v.extent(0),
     KOKKOS_LAMBDA(const int i) {
     for(int j=0; j<v.extent(1); j++)
       r(v(i,j))++;
@@ -43,7 +48,7 @@ double atomic_loop(Kokkos::View<int**> v,
 
 #if defined(KOKKOS_ENABLE_OPENMP)
 // Scatter Add algorithm using data replication
-double openmp_loop(Kokkos::View<int**,Kokkos::HostSpace> v, 
+double openmp_loop(Kokkos::View<int**,Kokkos::HostSpace> v,
 		 Kokkos::View<int*,Kokkos::HostSpace> r) {
   // Not timing creation of duplicated arrays, assume you can reuse
   Kokkos::View<int**,Kokkos::HostSpace> results("Rdup",Kokkos::OpenMP().concurrency(),r.extent(0));
@@ -52,7 +57,7 @@ double openmp_loop(Kokkos::View<int**,Kokkos::HostSpace> v,
   // Reset duplicated array
   Kokkos::deep_copy(results,0);
   // Run loop only for OpenMP
-  Kokkos::parallel_for("Duplicated Loop", 
+  Kokkos::parallel_for("Duplicated Loop",
     Kokkos::RangePolicy<Kokkos::OpenMP>(0,v.extent(0)),
     KOKKOS_LAMBDA(const int i) {
     // Every thread contribues to its version of the vector
