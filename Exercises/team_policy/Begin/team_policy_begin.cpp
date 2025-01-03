@@ -110,8 +110,8 @@ int main( int argc, char* argv[] )
 
   // EXERCISE: Use hierarchical parallel execution policy for calculation.
   // EXERCISE hints:
-  // typedef Kokkos::TeamPolicy<>               team_policy;
-  // typedef Kokkos::TeamPolicy<>::member_type  member_type;
+  typedef Kokkos::TeamPolicy<>               team_policy;
+  typedef Kokkos::TeamPolicy<>::member_type  member_type;
 
   // Timer products.
   Kokkos::Timer timer;
@@ -121,17 +121,20 @@ int main( int argc, char* argv[] )
     double result = 0;
 
     // EXERCISE: Convert from range_policy to team_policy.
-    Kokkos::parallel_reduce( "yAx", range_policy( 0, N ), KOKKOS_LAMBDA ( int j, double &update ) {
+    Kokkos::parallel_reduce( "yAx",
+                            Kokkos::TeamPolicy<>(N, Kokkos::AUTO),
+                            KOKKOS_LAMBDA ( const Kokkos::TeamPolicy<>::member_type &teamMember, double &update ) {
       // EXERCISE: Convert to nested Kokkos::parallel_reduce.
       // EXERCISE hint: Kokkos::TeamThreadRange( ??? ) and [&].
+      const int j = teamMember.league_rank();
       double temp2 = 0;
 
-      for ( int i = 0; i < M; ++i ) {
-        temp2 += A( j, i ) * x( i );
-      }
+      Kokkos::parallel_reduce(Kokkos::TeamThreadRange(teamMember, M), [&](const int i, double &inner_update){
+        inner_update += A( j, i ) * x( i );
+      }, temp2);
 
       // EXERCISE: Only one team member update the result.
-      update += y( j ) * temp2;
+      Kokkos::single(Kokkos::PerTeam(teamMember), [&](){update += y( j ) * temp2;});
     }, result );
 
     // Output result.
